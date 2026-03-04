@@ -1,4 +1,9 @@
-import { listUsers, type ListUsersRequest } from "@/modules/accounts/services/account.service"
+import {
+  listUsers,
+  updateUser,
+  type ListUsersRequest,
+  type UpdateUserRequest,
+} from "@/modules/accounts/services/account.service"
 import type {
   AccountModel,
   AccountStatus,
@@ -28,6 +33,7 @@ export type AccountsListResult = {
 
 export type SearchableUserField =
   | "id"
+  | "username"
   | "first_name"
   | "last_name"
   | "email"
@@ -42,6 +48,7 @@ export type UserSearchCondition = {
   value: string
   mode?: SearchMode
 }
+export type UpdateAccountRequest = UpdateUserRequest
 
 function isRecord(value: unknown): value is AnyRecord {
   return typeof value === "object" && value !== null
@@ -126,13 +133,12 @@ function parseAccountModel(value: unknown): AccountModel | undefined {
 
   return {
     id: typeof value.id === "string" ? value.id : "",
+    username: typeof value.username === "string" ? value.username : "",
     first_name: typeof value.first_name === "string" ? value.first_name : "",
     last_name: typeof value.last_name === "string" ? value.last_name : "",
     email: typeof value.email === "string" ? value.email : "",
-    mobile_number:
-      typeof value.mobile_number === "string" ? value.mobile_number : "",
-    password_hash:
-      typeof value.password_hash === "string" ? value.password_hash : "",
+    mobile_number: typeof value.mobile_number === "string" ? value.mobile_number : "",
+    password_hash: typeof value.password_hash === "string" ? value.password_hash : "",
     role_type: typeof value.role_type === "string" ? value.role_type : "",
     account_type: normalizeAccountType(value.account_type),
     status: normalizeAccountStatus(value.status),
@@ -151,10 +157,8 @@ function parsePagination(
     (isRecord(payloadRecord?.meta) ? payloadRecord?.meta : undefined)
 
   const page = parseNumber(meta?.page ?? payloadRecord?.page) ?? defaults.page
-  const limit =
-    parseNumber(meta?.limit ?? payloadRecord?.limit) ?? defaults.limit
-  const total =
-    parseNumber(meta?.total ?? payloadRecord?.total ?? payloadRecord?.count) ??
+  const limit = parseNumber(meta?.limit ?? payloadRecord?.limit) ?? defaults.limit
+  const total = parseNumber(meta?.total ?? payloadRecord?.total ?? payloadRecord?.count) ??
     defaults.itemCount
   const totalPages =
     parseNumber(
@@ -299,4 +303,11 @@ export async function getRegisteredProviders(
         account.account_type === "provider" && account.status === "approved"
     ),
   }
+}
+
+export async function updateAccount(
+  id: string,
+  payload: UpdateAccountRequest
+) {
+  await updateUser(id, payload)
 }

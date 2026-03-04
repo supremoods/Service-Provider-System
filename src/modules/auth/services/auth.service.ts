@@ -20,7 +20,7 @@ export type RegisterRequest = {
   email: string
   mobile_number: string
   role_type: string
-  password: string
+  password_hash: string
   account_type?: "admin" | "provider" | "customer"
 }
 

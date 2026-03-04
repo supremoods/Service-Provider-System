@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -26,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toaster"
 import type {
   AccountModel,
   AccountStatus,
@@ -35,6 +35,7 @@ import {
   buildUserSearch,
   buildUserSearchAnd,
   getAccounts,
+  updateAccount,
   type SearchableUserField,
   type UserSearchCondition,
   type UsersPagination,
@@ -45,6 +46,7 @@ type StatusFilter = "all" | AccountStatus
 
 const SEARCH_FIELDS: { value: SearchableUserField; label: string }[] = [
   { value: "id", label: "ID" },
+  { value: "username", label: "Username" },
   { value: "first_name", label: "First Name" },
   { value: "last_name", label: "Last Name" },
   { value: "email", label: "Email" },
@@ -111,6 +113,7 @@ function getStatusIcon(status: AccountStatus) {
 }
 
 export function AdminRegistrationsTable() {
+  const { toast } = useToast()
   const [registrations, setRegistrations] = useState<AccountModel[]>([])
   const [pendingAccountTypeDrafts, setPendingAccountTypeDrafts] = useState<
     Record<string, AccountType>
@@ -126,6 +129,9 @@ export function AdminRegistrationsTable() {
     DEFAULT_PAGINATION
   )
   const [isLoading, setIsLoading] = useState(false)
+  const [isMutatingById, setIsMutatingById] = useState<Record<string, boolean>>(
+    {}
+  )
   const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
@@ -231,62 +237,153 @@ export function AdminRegistrationsTable() {
 
   const filteredRows = useMemo(() => registrations, [registrations])
 
-  function setStatus(id: string, status: AccountStatus) {
-    setRegistrations((prev) =>
-      prev.map((record) => {
-        if (record.id !== id) {
-          return record
-        }
+  function getRecordDisplayName(record: AccountModel) {
+    return `${record.first_name} ${record.last_name}`.trim() || record.id
+  }
 
-        if (status === "approved") {
-          const selectedAccountType = pendingAccountTypeDrafts[id]
+  function setMutatingState(id: string, nextValue: boolean) {
+    setIsMutatingById((prev) => ({ ...prev, [id]: nextValue }))
+  }
 
-          if (selectedAccountType) {
-            return {
-              ...record,
-              status,
-              account_type: selectedAccountType,
-            }
-          }
-        }
+  async function setStatus(id: string, status: AccountStatus) {
+    const currentRecord = registrations.find((record) => record.id === id)
 
-        return { ...record, status }
+    if (!currentRecord) {
+      toast({
+        title: "Action failed",
+        description: "Unable to find the selected request.",
+        variant: "error",
       })
-    )
+      return
+    }
+
+    const selectedAccountType =
+      pendingAccountTypeDrafts[id] ?? currentRecord.account_type
+
+    try {
+      setMutatingState(id, true)
+
+      await updateAccount(
+        id,
+        status === "approved"
+          ? { status, account_type: selectedAccountType }
+          : { status }
+      )
+
+      setRegistrations((prev) =>
+        prev.map((record) => {
+          if (record.id !== id) {
+            return record
+          }
+
+          return {
+            ...record,
+            status,
+            account_type:
+              status === "approved" ? selectedAccountType : record.account_type,
+          }
+        })
+      )
+
+      if (status === "approved") {
+        toast({
+          title: "Request approved",
+          description: `${getRecordDisplayName(
+            currentRecord
+          )} approved as ${titleCase(selectedAccountType)}.`,
+          variant: "success",
+        })
+        return
+      }
+
+      toast({
+        title: "Request rejected",
+        description: `${getRecordDisplayName(currentRecord)} has been rejected.`,
+        variant: "success",
+      })
+    } catch (error: unknown) {
+      toast({
+        title: "Action failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unable to update the request status.",
+        variant: "error",
+      })
+    } finally {
+      setMutatingState(id, false)
+    }
   }
 
   function setPendingAccountTypeDraft(id: string, accountType: AccountType) {
     setPendingAccountTypeDrafts((prev) => ({ ...prev, [id]: accountType }))
   }
 
-  function assignPendingAccountType(id: string) {
+  async function assignPendingAccountType(id: string) {
+    const currentRecord = registrations.find((record) => record.id === id)
     const selectedAccountType = pendingAccountTypeDrafts[id]
 
-    if (!selectedAccountType) {
+    if (!currentRecord || !selectedAccountType) {
+      toast({
+        title: "Assignment failed",
+        description: "Unable to assign account type for this request.",
+        variant: "error",
+      })
       return
     }
 
-    setRegistrations((prev) =>
-      prev.map((record) => {
-        if (record.id !== id) {
-          return record
-        }
-
-        return {
-          ...record,
-          account_type: selectedAccountType,
-        }
+    if (currentRecord.account_type === selectedAccountType) {
+      toast({
+        title: "No changes applied",
+        description: "The selected account type is already assigned.",
+        variant: "info",
       })
-    )
+      return
+    }
+
+    try {
+      setMutatingState(id, true)
+
+      await updateAccount(id, { account_type: selectedAccountType })
+
+      setRegistrations((prev) =>
+        prev.map((record) => {
+          if (record.id !== id) {
+            return record
+          }
+
+          return {
+            ...record,
+            account_type: selectedAccountType,
+          }
+        })
+      )
+
+      toast({
+        title: "Account type assigned",
+        description: `${getRecordDisplayName(
+          currentRecord
+        )} set to ${titleCase(selectedAccountType)}.`,
+        variant: "success",
+      })
+    } catch (error: unknown) {
+      toast({
+        title: "Assignment failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unable to assign account type for this request.",
+        variant: "error",
+      })
+    } finally {
+      setMutatingState(id, false)
+    }
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Admin Registrations</CardTitle>
-        <CardDescription>
-          Loaded from `/users` with backend pagination and search.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-4">
@@ -368,6 +465,7 @@ export function AdminRegistrationsTable() {
             <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="px-3 py-2 font-medium">ID</th>
+                <th className="px-3 py-2 font-medium">Username</th>
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Email</th>
                 <th className="px-3 py-2 font-medium">Mobile</th>
@@ -383,7 +481,7 @@ export function AdminRegistrationsTable() {
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-3 py-8 text-center text-muted-foreground"
                   >
                     Loading registrations...
@@ -391,14 +489,14 @@ export function AdminRegistrationsTable() {
                 </tr>
               ) : loadError ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-red-600">
+                  <td colSpan={11} className="px-3 py-8 text-center text-red-600">
                     {loadError}
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-3 py-8 text-center text-muted-foreground"
                   >
                     No registrations found.
@@ -411,6 +509,7 @@ export function AdminRegistrationsTable() {
                     pendingAccountTypeDrafts[record.id] ||
                     record.account_type ||
                     ASSIGNABLE_ACCOUNT_TYPES[0]
+                  const isMutating = Boolean(isMutatingById[record.id])
                   const canAssignAccountType =
                     record.status === "pending" &&
                     selectedAccountType !== record.account_type
@@ -418,6 +517,9 @@ export function AdminRegistrationsTable() {
                   return (
                     <tr key={record.id} className="border-t align-top">
                       <td className="px-3 py-3 font-mono text-xs">{record.id}</td>
+                      <td className="px-3 py-3 font-mono text-xs">
+                        {record.username}
+                      </td>
                       <td className="px-3 py-3">
                         {record.first_name} {record.last_name}
                       </td>
@@ -452,6 +554,7 @@ export function AdminRegistrationsTable() {
                                     event.target.value as AccountType
                                   )
                                 }
+                                disabled={isMutating}
                                 className="h-8 w-36 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                               >
                                 {ASSIGNABLE_ACCOUNT_TYPES.map((accountType) => (
@@ -463,8 +566,10 @@ export function AdminRegistrationsTable() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => assignPendingAccountType(record.id)}
-                                disabled={!canAssignAccountType}
+                                onClick={() => {
+                                  void assignPendingAccountType(record.id)
+                                }}
+                                disabled={!canAssignAccountType || isMutating}
                               >
                                 Assign Account Type
                               </Button>
@@ -472,16 +577,20 @@ export function AdminRegistrationsTable() {
                           ) : null}
                           <Button
                             size="sm"
-                            onClick={() => setStatus(record.id, "approved")}
-                            disabled={record.status === "approved"}
+                            onClick={() => {
+                              void setStatus(record.id, "approved")
+                            }}
+                            disabled={record.status === "approved" || isMutating}
                           >
                             Approve
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setStatus(record.id, "rejected")}
-                            disabled={record.status === "rejected"}
+                            onClick={() => {
+                              void setStatus(record.id, "rejected")
+                            }}
+                            disabled={record.status === "rejected" || isMutating}
                           >
                             Reject
                           </Button>
@@ -492,6 +601,7 @@ export function AdminRegistrationsTable() {
                                 size="icon-sm"
                                 variant="ghost"
                                 aria-label="More actions"
+                                disabled={isMutating}
                               >
                                 <MoreHorizontal className="size-4" />
                               </Button>
@@ -500,8 +610,10 @@ export function AdminRegistrationsTable() {
                               <DropdownMenuLabel>Change status</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onSelect={() => setStatus(record.id, "approved")}
-                                disabled={record.status === "approved"}
+                                onSelect={() => {
+                                  void setStatus(record.id, "approved")
+                                }}
+                                disabled={record.status === "approved" || isMutating}
                               >
                                 <CheckCircle2 className="size-4" />
                                 Approve
@@ -510,8 +622,10 @@ export function AdminRegistrationsTable() {
                                 ) : null}
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onSelect={() => setStatus(record.id, "rejected")}
-                                disabled={record.status === "rejected"}
+                                onSelect={() => {
+                                  void setStatus(record.id, "rejected")
+                                }}
+                                disabled={record.status === "rejected" || isMutating}
                                 variant="destructive"
                               >
                                 <XCircle className="size-4" />

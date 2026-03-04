@@ -38,12 +38,14 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toaster"
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const { toast } = useToast()
   const [values, setValues] = useState<LoginFormValues>(initialLoginFormValues)
   const [errors, setErrors] = useState<LoginFormErrors>({})
   const [formError, setFormError] = useState("")
@@ -94,7 +96,13 @@ export function LoginForm({
       const token = session?.token
 
       if (!token) {
-        setFormError("Login succeeded but no session token was returned.")
+        const message = "Login succeeded but no session token was returned."
+        setFormError(message)
+        toast({
+          title: "Login failed",
+          description: message,
+          variant: "error",
+        })
         return
       }
 
@@ -105,14 +113,24 @@ export function LoginForm({
 
       const accountType =
         session.data?.account_type ?? getAccountTypeFromAccessToken(token)
+      toast({
+        title: "Login successful",
+        description: "You have successfully signed in.",
+        variant: "success",
+      })
       router.push(getDesignatedModuleRoute(accountType))
       router.refresh()
     } catch (error: unknown) {
-      setFormError(
+      const message =
         error instanceof Error
           ? error.message
           : "Unable to login. Please try again."
-      )
+      setFormError(message)
+      toast({
+        title: "Unable to login",
+        description: message,
+        variant: "error",
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -182,7 +200,6 @@ export function LoginForm({
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Signing in..." : "Login"}
                 </Button>
-                {formError ? <FieldError>{formError}</FieldError> : null}
                 <FieldDescription className="text-center">
                   Don&apos;t have an account? <a href="/signup">Sign up</a>
                 </FieldDescription>

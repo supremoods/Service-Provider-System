@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -22,6 +21,7 @@ import {
 
 const SEARCH_FIELDS: { value: SearchableUserField; label: string }[] = [
   { value: "id", label: "ID" },
+  { value: "username", label: "Username" },
   { value: "first_name", label: "First Name" },
   { value: "last_name", label: "Last Name" },
   { value: "email", label: "Email" },
@@ -117,10 +117,6 @@ export function ProviderServicesTable() {
     <Card>
       <CardHeader>
         <CardTitle>Registered Services</CardTitle>
-        <CardDescription>
-          Loaded from `/users` with pagination and search. Showing only approved
-          provider records.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
@@ -173,6 +169,7 @@ export function ProviderServicesTable() {
             <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="px-3 py-2 font-medium">ID</th>
+                <th className="px-3 py-2 font-medium">Username</th>
                 <th className="px-3 py-2 font-medium">Provider</th>
                 <th className="px-3 py-2 font-medium">Email</th>
                 <th className="px-3 py-2 font-medium">Mobile</th>
@@ -186,7 +183,7 @@ export function ProviderServicesTable() {
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-muted-foreground"
                   >
                     Loading providers...
@@ -194,14 +191,14 @@ export function ProviderServicesTable() {
                 </tr>
               ) : loadError ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-red-600">
+                  <td colSpan={9} className="px-3 py-8 text-center text-red-600">
                     {loadError}
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-muted-foreground"
                   >
                     No registered services found.
@@ -211,6 +208,8 @@ export function ProviderServicesTable() {
                 filteredRows.map((record) => (
                   <tr key={record.id} className="border-t">
                     <td className="px-3 py-3 font-mono text-xs">{record.id}</td>
+                    <td className="px-3 py-3 font-mono text-xs">{record.username}</td>
+
                     <td className="px-3 py-3">
                       {record.first_name} {record.last_name}
                     </td>

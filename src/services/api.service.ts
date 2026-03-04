@@ -80,6 +80,42 @@ function normalizeEndpointPath(endpoint: string) {
   return endpoint.split("?")[0].replace(/^\/+/, "")
 }
 
+function extractApiErrorMessage(response: Response, errorText: string) {
+  const trimmed = errorText.trim()
+
+  if (trimmed) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      const message = findStringByKeys(parsed, [
+        "errorMessage",
+        "message",
+        "error_description",
+        "detail",
+        "title",
+      ])
+
+      if (message) {
+        return message
+      }
+    } catch {
+      // Keep fallback path for non-JSON responses.
+    }
+
+    // If backend returned plain text, surface it directly.
+    const looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[")
+    const looksLikeHtml = trimmed.startsWith("<")
+    if (!looksLikeJson && !looksLikeHtml) {
+      return trimmed
+    }
+  }
+
+  if (response.statusText) {
+    return response.statusText
+  }
+
+  return `Request failed with status ${response.status}`
+}
+
 function isSafeMethod(method: string) {
   return method === "GET" || method === "HEAD" || method === "OPTIONS" || method === "TRACE"
 }
@@ -198,7 +234,7 @@ export function createApi() {
         }
 
         const errorText = await response.text()
-        throw new Error(`API error (${response.status}): ${errorText}`)
+        throw new Error(extractApiErrorMessage(response, errorText))
       }
 
       return (await response.json()) as IBaseResponse<T>

@@ -19,6 +19,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/toaster"
 import {
   extractAuthSession,
   register,
@@ -42,6 +43,7 @@ import { mapZodIssuesToFieldErrors } from "@/validators/zod.validator"
 
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const router = useRouter()
+  const { toast } = useToast()
   const [values, setValues] = useState<SignupFormValues>(
     initialSignupFormValues
   )
@@ -96,7 +98,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         email: parsed.data.email,
         mobile_number: parsed.data.mobileNumber,
         role_type: parsed.data.role,
-        password: parsed.data.password,
+        password_hash: parsed.data.password,
         account_type: "customer",
       })
       const session = extractAuthSession(response)
@@ -107,6 +109,11 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         if (session.refreshToken) {
           setRefreshTokenCookie(session.refreshToken)
         }
+        toast({
+          title: "Registration successful",
+          description: "Your account has been created.",
+          variant: "success",
+        })
         const accountType =
           session.data?.account_type ??
           getAccountTypeFromAccessToken(token) ??
@@ -117,15 +124,25 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       }
 
       setValues(initialSignupFormValues)
-      setSuccessMessage(
+      const successText =
         response.message ?? "Registration successful. You can now sign in."
-      )
+      setSuccessMessage(successText)
+      toast({
+        title: "Registration successful",
+        description: successText,
+        variant: "success",
+      })
     } catch (error: unknown) {
-      setFormError(
+      const message =
         error instanceof Error
           ? error.message
           : "Unable to register. Please try again."
-      )
+      setFormError(message)
+      toast({
+        title: "Unable to register",
+        description: message,
+        variant: "error",
+      })
     } finally {
       setIsSubmitting(false)
     }

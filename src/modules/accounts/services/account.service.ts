@@ -10,6 +10,18 @@ export type ListUsersRequest = {
   search?: string
 }
 
+export type UpdateUserRequest = Partial<{
+  username: string
+  first_name: string
+  last_name: string
+  email: string
+  mobile_number: string
+  password_hash: string
+  role_type: string
+  account_type: "admin" | "provider" | "customer"
+  status: "pending" | "approved" | "rejected"
+}>
+
 function buildListUsersParams(payload: ListUsersRequest) {
   const params: NonNullable<FetchOptions["params"]> = {}
 
@@ -38,4 +50,10 @@ export async function listUsers(payload: ListUsersRequest = {}) {
   return accountsApi.get<unknown>("/users", {
     params: Object.keys(params).length > 0 ? params : undefined,
   }) as Promise<IBaseResponse<unknown>>
+}
+
+export async function updateUser(id: string, payload: UpdateUserRequest) {
+  return accountsApi.put<unknown>("/users", id, payload) as Promise<
+    IBaseResponse<unknown>
+  >
 }

@@ -4,6 +4,7 @@ export type AccountStatus = "pending" | "approved" | "rejected"
 
 export interface AccountModel {
   id: string
+  username: string
   first_name: string
   last_name: string
   email: string
