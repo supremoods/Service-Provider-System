@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +20,11 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  extractAuthSession,
+  register,
+} from "@/modules/auth/services/auth.service"
+import { getDesignatedModuleRoute } from "@/modules/auth/services/auth-routing.service"
+import {
   initialSignupFormValues,
   signupFormFieldKeys,
   signupFormSchema,
@@ -27,14 +33,22 @@ import {
   type SignupFormFieldKey,
   type SignupFormValues,
 } from "@/modules/auth/validators/signup-form.validator"
+import {
+  getAccountTypeFromAccessToken,
+  setBearerTokenCookie,
+  setRefreshTokenCookie,
+} from "@/proxy/auth-token.proxy"
 import { mapZodIssuesToFieldErrors } from "@/validators/zod.validator"
 
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
+  const router = useRouter()
   const [values, setValues] = useState<SignupFormValues>(
     initialSignupFormValues
   )
   const [errors, setErrors] = useState<SignupFormErrors>({})
+  const [formError, setFormError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   function handleChange<Field extends SignupFormFieldKey>(
     field: Field,
@@ -53,11 +67,13 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     })
 
     setSuccessMessage("")
+    setFormError("")
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSuccessMessage("")
+    setFormError("")
 
     const parsed = signupFormSchema.safeParse(values)
 
@@ -69,7 +85,50 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     }
 
     setErrors({})
-    setSuccessMessage("All fields are valid.")
+
+    try {
+      setIsSubmitting(true)
+
+      const response = await register({
+        first_name: parsed.data.firstName,
+        last_name: parsed.data.lastName,
+        username: parsed.data.username,
+        email: parsed.data.email,
+        mobile_number: parsed.data.mobileNumber,
+        role_type: parsed.data.role,
+        password: parsed.data.password,
+        account_type: "customer",
+      })
+      const session = extractAuthSession(response)
+      const token = session?.token
+
+      if (token) {
+        setBearerTokenCookie(token)
+        if (session.refreshToken) {
+          setRefreshTokenCookie(session.refreshToken)
+        }
+        const accountType =
+          session.data?.account_type ??
+          getAccountTypeFromAccessToken(token) ??
+          "customer"
+        router.push(getDesignatedModuleRoute(accountType))
+        router.refresh()
+        return
+      }
+
+      setValues(initialSignupFormValues)
+      setSuccessMessage(
+        response.message ?? "Registration successful. You can now sign in."
+      )
+    } catch (error: unknown) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Unable to register. Please try again."
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -287,7 +346,10 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 />
               </Field>
               <Field className="md:col-span-2">
-                <Button type="submit">Create Account</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create Account"}
+                </Button>
+                {formError ? <FieldError>{formError}</FieldError> : null}
                 {successMessage ? (
                   <FieldDescription className="text-center text-emerald-600">
                     {successMessage}

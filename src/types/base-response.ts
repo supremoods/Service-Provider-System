@@ -1,6 +1,7 @@
 export interface IBaseResponse<T> {
   success: boolean
   message?: string
-  data: T
+  data?: T
+  response?: T
   error?: unknown
 }

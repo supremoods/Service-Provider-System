@@ -1,8 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CheckCircle2 } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -11,7 +12,31 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { getRegisteredProviders } from "@/repositories/account.repository"
+import type { AccountModel } from "@/modules/accounts/models/account.model"
+import {
+  buildUserSearch,
+  getRegisteredProviders,
+  type SearchableUserField,
+  type UsersPagination,
+} from "@/repositories/account.repository"
+
+const SEARCH_FIELDS: { value: SearchableUserField; label: string }[] = [
+  { value: "id", label: "ID" },
+  { value: "first_name", label: "First Name" },
+  { value: "last_name", label: "Last Name" },
+  { value: "email", label: "Email" },
+  { value: "mobile_number", label: "Mobile" },
+  { value: "role_type", label: "Role" },
+]
+
+const DEFAULT_PAGINATION: UsersPagination = {
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 1,
+  hasPrevious: false,
+  hasNext: false,
+}
 
 function formatDate(value: Date | undefined) {
   if (!value) {
@@ -28,45 +53,80 @@ function formatDate(value: Date | undefined) {
 }
 
 export function ProviderServicesTable() {
+  const [records, setRecords] = useState<AccountModel[]>([])
   const [search, setSearch] = useState("")
+  const [searchField, setSearchField] =
+    useState<SearchableUserField>("first_name")
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [pagination, setPagination] = useState<UsersPagination>(
+    DEFAULT_PAGINATION
+  )
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState("")
 
-  const registeredServices = useMemo(() => {
-    return getRegisteredProviders()
-  }, [])
+  useEffect(() => {
+    let isActive = true
 
-  const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase()
+    async function loadProviders() {
+      setIsLoading(true)
+      setLoadError("")
 
-    if (!query) {
-      return registeredServices
+      try {
+        const searchQuery = buildUserSearch(searchField, search, "like")
+        const result = await getRegisteredProviders({
+          paginate: true,
+          limit,
+          page,
+          search: searchQuery,
+        })
+
+        if (!isActive) {
+          return
+        }
+
+        setRecords(result.items)
+        setPagination(result.pagination)
+      } catch (error: unknown) {
+        if (!isActive) {
+          return
+        }
+
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load service providers."
+        )
+      } finally {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      }
     }
 
-    return registeredServices.filter((record) => {
-      const fullName = `${record.first_name} ${record.last_name}`.toLowerCase()
+    loadProviders()
 
-      return (
-        record.id.toLowerCase().includes(query) ||
-        fullName.includes(query) ||
-        record.email.toLowerCase().includes(query) ||
-        record.mobile_number.toLowerCase().includes(query) ||
-        record.role_type.toLowerCase().includes(query)
-      )
-    })
-  }, [search, registeredServices])
+    return () => {
+      isActive = false
+    }
+  }, [limit, page, search, searchField])
+
+  const filteredRows = useMemo(() => records, [records])
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Registered Services</CardTitle>
         <CardDescription>
-          Viewing only approved and registered service providers.
+          Loaded from `/users` with pagination and search. Showing only approved
+          provider records.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-lg border p-3 text-sm">
-            <p className="text-muted-foreground">Total Registered</p>
-            <p className="text-lg font-semibold">{registeredServices.length}</p>
+            <p className="text-muted-foreground">Total (Current Page)</p>
+            <p className="text-lg font-semibold">{records.length}</p>
           </div>
           <div className="rounded-lg border p-3 text-sm">
             <p className="text-muted-foreground">Showing</p>
@@ -81,11 +141,32 @@ export function ProviderServicesTable() {
           </div>
         </div>
 
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search provider, email, role, mobile..."
-        />
+        <div className="grid gap-3 md:grid-cols-4">
+          <Input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+            placeholder="Search value..."
+            className="md:col-span-3"
+          />
+          <select
+            data-slot="input"
+            value={searchField}
+            onChange={(event) => {
+              setSearchField(event.target.value as SearchableUserField)
+              setPage(1)
+            }}
+            className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {SEARCH_FIELDS.map((field) => (
+              <option key={field.value} value={field.value}>
+                {field.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[920px] text-sm">
@@ -102,7 +183,22 @@ export function ProviderServicesTable() {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-8 text-center text-muted-foreground"
+                  >
+                    Loading providers...
+                  </td>
+                </tr>
+              ) : loadError ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-red-600">
+                    {loadError}
+                  </td>
+                </tr>
+              ) : filteredRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
@@ -134,6 +230,45 @@ export function ProviderServicesTable() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Page {pagination.page} of {pagination.totalPages} - {pagination.total}{" "}
+            total records
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              data-slot="input"
+              value={limit}
+              onChange={(event) => {
+                setLimit(Number(event.target.value))
+                setPage(1)
+              }}
+              className="h-9 w-24 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={isLoading || !pagination.hasPrevious}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setPage((prev) => prev + 1)}
+              disabled={isLoading || !pagination.hasNext}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

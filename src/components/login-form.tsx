@@ -1,8 +1,19 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 
 import { cn } from "@/lib/utils"
+import {
+  getAccountTypeFromAccessToken,
+  setBearerTokenCookie,
+  setRefreshTokenCookie,
+} from "@/proxy/auth-token.proxy"
+import { getDesignatedModuleRoute } from "@/modules/auth/services/auth-routing.service"
+import {
+  extractAuthSession,
+  login,
+} from "@/modules/auth/services/auth.service"
 import {
   initialLoginFormValues,
   loginFormFieldKeys,
@@ -32,8 +43,11 @@ export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  const router = useRouter()
   const [values, setValues] = useState<LoginFormValues>(initialLoginFormValues)
   const [errors, setErrors] = useState<LoginFormErrors>({})
+  const [formError, setFormError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   function handleChange(
     field: keyof LoginFormValues,
@@ -50,10 +64,13 @@ export function LoginForm({
       delete next[field]
       return next
     })
+
+    setFormError("")
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setFormError("")
 
     const parsed = loginFormSchema.safeParse(values)
 
@@ -65,6 +82,40 @@ export function LoginForm({
     }
 
     setErrors({})
+
+    try {
+      setIsSubmitting(true)
+
+      const response = await login({
+        username: parsed.data.username,
+        password: parsed.data.password,
+      })
+      const session = extractAuthSession(response)
+      const token = session?.token
+
+      if (!token) {
+        setFormError("Login succeeded but no session token was returned.")
+        return
+      }
+
+      setBearerTokenCookie(token)
+      if (session.refreshToken) {
+        setRefreshTokenCookie(session.refreshToken)
+      }
+
+      const accountType =
+        session.data?.account_type ?? getAccountTypeFromAccessToken(token)
+      router.push(getDesignatedModuleRoute(accountType))
+      router.refresh()
+    } catch (error: unknown) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Unable to login. Please try again."
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -73,7 +124,7 @@ export function LoginForm({
         <CardHeader>
           <CardTitle>Login to your account</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            Enter your username and password to login to your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -83,7 +134,7 @@ export function LoginForm({
                 <FieldLabel htmlFor="username">Username</FieldLabel>
                 <Input
                   id="username"
-                  type="email"
+                  type="text"
                   placeholder="Input username"
                   autoComplete="username"
                   value={values.username}
@@ -128,7 +179,10 @@ export function LoginForm({
                 />
               </Field>
               <Field>
-                <Button type="submit">Login</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Signing in..." : "Login"}
+                </Button>
+                {formError ? <FieldError>{formError}</FieldError> : null}
                 <FieldDescription className="text-center">
                   Don&apos;t have an account? <a href="/signup">Sign up</a>
                 </FieldDescription>
