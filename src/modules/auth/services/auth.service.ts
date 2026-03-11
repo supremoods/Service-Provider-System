@@ -126,16 +126,13 @@ export function extractAuthSession(response: IBaseResponse<unknown>) {
   const tokenKeys = ["access_token", "accessToken", "token", "jwt"] as const
   const refreshTokenKeys = ["refreshToken", "refresh_token"] as const
 
-  const token =
-    findStringByKeys(payload, tokenKeys) ?? findStringByKeys(response, tokenKeys)
+  const token = findStringByKeys(payload, tokenKeys) ?? findStringByKeys(response, tokenKeys)
 
   if (!token) {
     return undefined
   }
 
-  const refreshToken =
-    findStringByKeys(payload, refreshTokenKeys) ??
-    findStringByKeys(response, refreshTokenKeys)
+  const refreshToken = findStringByKeys(payload, refreshTokenKeys) ?? findStringByKeys(response, refreshTokenKeys)
   const user = parseAuthUser(getUserPayload(payload))
 
   if (user) {

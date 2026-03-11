@@ -91,7 +91,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     try {
       setIsSubmitting(true)
 
-      const response = await register({
+      await register({
         first_name: parsed.data.firstName,
         last_name: parsed.data.lastName,
         username: parsed.data.username,
@@ -101,31 +101,9 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         password_hash: parsed.data.password,
         account_type: "customer",
       })
-      const session = extractAuthSession(response)
-      const token = session?.token
-
-      if (token) {
-        setBearerTokenCookie(token)
-        if (session.refreshToken) {
-          setRefreshTokenCookie(session.refreshToken)
-        }
-        toast({
-          title: "Registration successful",
-          description: "Your account has been created.",
-          variant: "success",
-        })
-        const accountType =
-          session.data?.account_type ??
-          getAccountTypeFromAccessToken(token) ??
-          "customer"
-        router.push(getDesignatedModuleRoute(accountType))
-        router.refresh()
-        return
-      }
-
+    
       setValues(initialSignupFormValues)
-      const successText =
-        response.message ?? "Registration successful. You can now sign in."
+      const successText = "Registration successful. You can now sign in."
       setSuccessMessage(successText)
       toast({
         title: "Registration successful",
